@@ -148,7 +148,127 @@ export const UI_CONSTANTS = {
 if (activeTab === VARIANT_TYPES.WRONG) { }
 ```
 
-### 4. Separation of Concerns
+### 4. KISS - Keep It Simple, Stupid
+Jednoduchost je klíčová pro udržitelnost kódu.
+
+**Před refaktoringem:**
+```javascript
+// Složité vnořené podmínky
+const processItem = (item) => {
+  if (item) {
+    if (item.type === 'wrong') {
+      if (item.isActive) {
+        if (item.hasChildren) {
+          // Čtyři úrovně zanořování!
+          return processChildren(item.children);
+        }
+      }
+    }
+  }
+};
+```
+
+**Po refaktoringu:**
+```javascript
+// Early returns pro snížení složitosti
+const processItem = (item) => {
+  if (!item) return null;
+  if (item.type !== 'wrong') return null;
+  if (!item.isActive) return null;
+  if (!item.hasChildren) return null;
+  
+  return processChildren(item.children);
+};
+```
+
+### 5. Kompletní SOLID principy
+
+#### Single Responsibility Principle (SRP)
+Již zmíněno výše - každý modul má jednu zodpovědnost.
+
+#### Open/Closed Principle
+Komponenty jsou otevřené pro rozšíření, uzavřené pro modifikaci.
+
+**Implementace:**
+```javascript
+// Extensible variant renderer
+const VariantRenderer = ({ type, items, onDragEnd }) => {
+  const components = {
+    wrong: WrongVariant,
+    correct: CorrectVariant,
+    generated: GeneratedVariant
+  };
+  
+  const Component = components[type] || DefaultVariant;
+  return <Component items={items} onDragEnd={onDragEnd} />;
+};
+```
+
+#### Liskov Substitution Principle
+Všechny varianty jsou zaměnitelné bez změny chování.
+
+```javascript
+// Všechny varianty implementují stejné rozhraní
+interface VariantProps {
+  items: Item[];
+  onDragEnd: (event: DragEndEvent) => void;
+}
+```
+
+#### Interface Segregation Principle
+Malá, specifická rozhraní místo monolitických.
+
+**Před:**
+```javascript
+// Příliš obecné rozhraní
+interface ItemProps {
+  id: string;
+  value: string;
+  onDelete: Function;
+  onEdit: Function;
+  onMove: Function;
+  onDuplicate: Function; // Ne všechny komponenty potřebují všechno
+}
+```
+
+**Po:**
+```javascript
+// Specifické rozhraní
+interface SortableItemProps {
+  id: string;
+  value: string;
+  onDelete: (id: string) => void;
+}
+
+interface EditableItemProps extends SortableItemProps {
+  onEdit: (id: string, value: string) => void;
+}
+```
+
+#### Dependency Inversion Principle
+Závislost na abstrakcích, ne konkrétních implementacích.
+
+```javascript
+// Abstraktní rozhraní pro ID generátory
+interface IdGenerator {
+  generate(): string;
+}
+
+// Konkrétní implementace
+class NanoIdGenerator implements IdGenerator {
+  generate() { return generateNanoId(); }
+}
+
+// Komponenta závisí na abstrakci
+const useItems = (idGenerator: IdGenerator) => {
+  const addItem = () => {
+    const id = idGenerator.generate(); // Ne přímo na generateNanoId()
+    // ...
+  };
+};
+```
+
+### 6. Separation of Concerns
 Oddělení různých vrstev aplikace.
 
 **Struktura po refaktoringu:**
@@ -167,7 +287,7 @@ src/
     └── index.js
 ```
 
-### 5. Pure funkce a immutabilita
+### 7. Pure funkce a immutabilita
 **Před:**
 ```javascript
 let idCounter = 0; // Globální mutable state
@@ -187,7 +307,7 @@ export const generateNanoId = (size = 8) => {
 };
 ```
 
-### 6. Early returns pro lepší čitelnost
+### 8. Early returns pro lepší čitelnost
 **Před:**
 ```javascript
 const handleDelete = (id) => {
@@ -210,6 +330,139 @@ const handleDelete = (id) => {
   deleteItem(id);
   addHistoryEntry(/* ... */);
 };
+```
+
+### 9. Testovatelnost kódu
+Čistý kód musí být snadno testovatelný.
+
+**Před refaktoringem:**
+```javascript
+// Obtížně testovatelné - vše smíchané
+export default function App() {
+  const [items, setItems] = useState([]);
+  // Drag logic, API calls, UI rendering - vše pohromadě
+}
+```
+
+**Po refaktoringu:**
+```javascript
+// hooks/useDragAndDrop.js - čistě testovatelná logika
+export const useDragAndDrop = (initialItems, findIndexById) => {
+  // Pure business logika bez UI závislostí
+  // Snadné unit testování
+};
+
+// components/SortableItem.jsx - izolovaná komponenta
+const SortableItem = ({ id, value, onDelete }) => {
+  // Pouze UI logika
+  // Testovatelná pomocí React Testing Library
+};
+```
+
+### 10. Error handling
+Explicitní zpracování chyb pro robustní aplikaci.
+
+**Implementace:**
+```javascript
+// hooks/useDragAndDrop.js
+export const useDragAndDrop = (initialItems, findIndexById) => {
+  const [error, setError] = useState(null);
+  
+  const handleDragEnd = useCallback((event) => {
+    try {
+      const { active, over } = event;
+      
+      if (!active || !over) {
+        throw new Error('Neplatná drag operace');
+      }
+      
+      // Hlavní logika...
+      
+    } catch (err) {
+      setError(err.message);
+      console.error('Drag error:', err);
+    }
+  }, [items, findIndexById]);
+  
+  return { items, handleDragEnd, error };
+};
+
+// Komponenta zobrazuje chyby uživateli
+const ErrorBoundary = ({ error, children }) => {
+  if (error) {
+    return (
+      <div className="error-message">
+        <p>Něco se pokazilo: {error}</p>
+        <button onClick={() => window.location.reload()}>
+          Obnovit stránku
+        </button>
+      </div>
+    );
+  }
+  
+  return children;
+};
+```
+
+### 11. Bezpečnost
+Základní bezpečnostní principy v kódu.
+
+**Validace vstupů:**
+```javascript
+// utils/validators.js
+export const validateItemId = (id) => {
+  if (!id || typeof id !== 'string') {
+    throw new Error('ID musí být neprázdný string');
+  }
+  
+  if (id.includes('<') || id.includes('>')) {
+    throw new Error('ID obsahuje nepovolené znaky');
+  }
+  
+  return true;
+};
+
+// Použití v komponentách
+const handleDeleteItem = (id) => {
+  try {
+    validateItemId(id);
+    deleteItem(id);
+  } catch (error) {
+    setError(error.message);
+  }
+};
+```
+
+**Environment proměnné:**
+```javascript
+// config/environment.js
+export const config = {
+  apiUrl: process.env.REACT_APP_API_URL || 'https://localhost:3000',
+  debugMode: process.env.NODE_ENV === 'development',
+  // Nikdy neukládáme API klíče přímo v kódu!
+};
+```
+
+### 12. Performance optimalizace
+Udržitelný výkon bez složitosti.
+
+**Implementované optimalizace:**
+```javascript
+// React.memo pro komponenty bez častých změn
+export default React.memo(SortableItem);
+
+// useCallback pro event handlery
+const handleDragEnd = useCallback((event) => {
+  // Logika...
+}, [items, findIndexById]);
+
+// useMemo pro výpočetně náročné operace
+const sortedItems = useMemo(() => {
+  return items.sort((a, b) => a.order - b.order);
+}, [items]);
+
+// Lazy loading pro velké komponenty
+const HeavyComponent = React.lazy(() => import('./HeavyComponent'));
 ```
 
 ## Proces refaktoringu krok za krokem

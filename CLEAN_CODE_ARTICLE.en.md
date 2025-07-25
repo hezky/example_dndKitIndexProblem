@@ -148,7 +148,127 @@ export const UI_CONSTANTS = {
 if (activeTab === VARIANT_TYPES.WRONG) { }
 ```
 
-### 4. Separation of Concerns
+### 4. KISS - Keep It Simple, Stupid
+Simplicity is key to maintainable code.
+
+**Before refactoring:**
+```javascript
+// Complex nested conditions
+const processItem = (item) => {
+  if (item) {
+    if (item.type === 'wrong') {
+      if (item.isActive) {
+        if (item.hasChildren) {
+          // Four levels of nesting!
+          return processChildren(item.children);
+        }
+      }
+    }
+  }
+};
+```
+
+**After refactoring:**
+```javascript
+// Early returns to reduce complexity
+const processItem = (item) => {
+  if (!item) return null;
+  if (item.type !== 'wrong') return null;
+  if (!item.isActive) return null;
+  if (!item.hasChildren) return null;
+  
+  return processChildren(item.children);
+};
+```
+
+### 5. Complete SOLID Principles
+
+#### Single Responsibility Principle (SRP)
+Already mentioned above - each module has one responsibility.
+
+#### Open/Closed Principle
+Components are open for extension, closed for modification.
+
+**Implementation:**
+```javascript
+// Extensible variant renderer
+const VariantRenderer = ({ type, items, onDragEnd }) => {
+  const components = {
+    wrong: WrongVariant,
+    correct: CorrectVariant,
+    generated: GeneratedVariant
+  };
+  
+  const Component = components[type] || DefaultVariant;
+  return <Component items={items} onDragEnd={onDragEnd} />;
+};
+```
+
+#### Liskov Substitution Principle
+All variants are interchangeable without changing behavior.
+
+```javascript
+// All variants implement the same interface
+interface VariantProps {
+  items: Item[];
+  onDragEnd: (event: DragEndEvent) => void;
+}
+```
+
+#### Interface Segregation Principle
+Small, specific interfaces instead of monolithic ones.
+
+**Before:**
+```javascript
+// Too generic interface
+interface ItemProps {
+  id: string;
+  value: string;
+  onDelete: Function;
+  onEdit: Function;
+  onMove: Function;
+  onDuplicate: Function; // Not all components need everything
+}
+```
+
+**After:**
+```javascript
+// Specific interface
+interface SortableItemProps {
+  id: string;
+  value: string;
+  onDelete: (id: string) => void;
+}
+
+interface EditableItemProps extends SortableItemProps {
+  onEdit: (id: string, value: string) => void;
+}
+```
+
+#### Dependency Inversion Principle
+Depend on abstractions, not concrete implementations.
+
+```javascript
+// Abstract interface for ID generators
+interface IdGenerator {
+  generate(): string;
+}
+
+// Concrete implementation
+class NanoIdGenerator implements IdGenerator {
+  generate() { return generateNanoId(); }
+}
+
+// Component depends on abstraction
+const useItems = (idGenerator: IdGenerator) => {
+  const addItem = () => {
+    const id = idGenerator.generate(); // Not directly on generateNanoId()
+    // ...
+  };
+};
+```
+
+### 6. Separation of Concerns
 Separating different layers of the application.
 
 **Structure after refactoring:**
@@ -167,7 +287,7 @@ src/
     └── index.js
 ```
 
-### 5. Pure Functions and Immutability
+### 7. Pure Functions and Immutability
 **Before:**
 ```javascript
 let idCounter = 0; // Global mutable state
@@ -187,7 +307,7 @@ export const generateNanoId = (size = 8) => {
 };
 ```
 
-### 6. Early Returns for Better Readability
+### 8. Early Returns for Better Readability
 **Before:**
 ```javascript
 const handleDelete = (id) => {
@@ -210,6 +330,139 @@ const handleDelete = (id) => {
   deleteItem(id);
   addHistoryEntry(/* ... */);
 };
+```
+
+### 9. Code Testability
+Clean code must be easily testable.
+
+**Before refactoring:**
+```javascript
+// Hard to test - everything mixed
+export default function App() {
+  const [items, setItems] = useState([]);
+  // Drag logic, API calls, UI rendering - all together
+}
+```
+
+**After refactoring:**
+```javascript
+// hooks/useDragAndDrop.js - purely testable logic
+export const useDragAndDrop = (initialItems, findIndexById) => {
+  // Pure business logic without UI dependencies
+  // Easy unit testing
+};
+
+// components/SortableItem.jsx - isolated component
+const SortableItem = ({ id, value, onDelete }) => {
+  // Only UI logic
+  // Testable with React Testing Library
+};
+```
+
+### 10. Error Handling
+Explicit error handling for robust applications.
+
+**Implementation:**
+```javascript
+// hooks/useDragAndDrop.js
+export const useDragAndDrop = (initialItems, findIndexById) => {
+  const [error, setError] = useState(null);
+  
+  const handleDragEnd = useCallback((event) => {
+    try {
+      const { active, over } = event;
+      
+      if (!active || !over) {
+        throw new Error('Invalid drag operation');
+      }
+      
+      // Main logic...
+      
+    } catch (err) {
+      setError(err.message);
+      console.error('Drag error:', err);
+    }
+  }, [items, findIndexById]);
+  
+  return { items, handleDragEnd, error };
+};
+
+// Component displays errors to user
+const ErrorBoundary = ({ error, children }) => {
+  if (error) {
+    return (
+      <div className="error-message">
+        <p>Something went wrong: {error}</p>
+        <button onClick={() => window.location.reload()}>
+          Reload page
+        </button>
+      </div>
+    );
+  }
+  
+  return children;
+};
+```
+
+### 11. Security
+Basic security principles in code.
+
+**Input validation:**
+```javascript
+// utils/validators.js
+export const validateItemId = (id) => {
+  if (!id || typeof id !== 'string') {
+    throw new Error('ID must be non-empty string');
+  }
+  
+  if (id.includes('<') || id.includes('>')) {
+    throw new Error('ID contains forbidden characters');
+  }
+  
+  return true;
+};
+
+// Usage in components
+const handleDeleteItem = (id) => {
+  try {
+    validateItemId(id);
+    deleteItem(id);
+  } catch (error) {
+    setError(error.message);
+  }
+};
+```
+
+**Environment variables:**
+```javascript
+// config/environment.js
+export const config = {
+  apiUrl: process.env.REACT_APP_API_URL || 'https://localhost:3000',
+  debugMode: process.env.NODE_ENV === 'development',
+  // Never store API keys directly in code!
+};
+```
+
+### 12. Performance Optimization
+Sustainable performance without complexity.
+
+**Implemented optimizations:**
+```javascript
+// React.memo for components without frequent changes
+export default React.memo(SortableItem);
+
+// useCallback for event handlers
+const handleDragEnd = useCallback((event) => {
+  // Logic...
+}, [items, findIndexById]);
+
+// useMemo for computationally expensive operations
+const sortedItems = useMemo(() => {
+  return items.sort((a, b) => a.order - b.order);
+}, [items]);
+
+// Lazy loading for heavy components
+const HeavyComponent = React.lazy(() => import('./HeavyComponent'));
 ```
 
 ## Refactoring Process Step by Step
