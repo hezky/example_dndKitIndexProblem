@@ -1,4 +1,4 @@
-// src/App.jsx
+// src/App.refactored.jsx
 // Hlavní aplikace - refaktorovaná verze s čistým kódem
 // Tato komponenta orchestruje celou aplikaci a deleguje specifickou logiku do modulů
 
